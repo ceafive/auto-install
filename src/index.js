@@ -13,6 +13,13 @@ let main;
 let secureMode = false;
 if (argv.secure) secureMode = true;
 
+/**
+ * Show installation notifications
+ */
+
+let notifyMode = true;
+if (argv['notify']) notifyMode = false;
+
 let uninstallMode = false;
 if (argv.uninstall) uninstallMode = true;
 
@@ -53,7 +60,8 @@ main = () => {
 
   if (uninstallMode) {
     let unusedModules = helpers.diff(installedModules, usedModules);
-    for (let module of unusedModules) helpers.uninstallModule(module);
+    for (let module of unusedModules)
+      helpers.uninstallModule(module, notifyMode);
   }
 
   if (!watchersInitialized) initializeWatchers();
@@ -62,8 +70,8 @@ main = () => {
 
   let modulesNotInstalled = helpers.diff(usedModules, installedModules);
   for (let module of modulesNotInstalled) {
-    if (secureMode) helpers.installModuleIfTrusted(module);
-    else helpers.installModule(module);
+    if (secureMode) helpers.installModuleIfTrusted(module, notifyMode);
+    else helpers.installModule(module, notifyMode);
   }
 };
 

@@ -11,6 +11,7 @@ const argv = require('yargs').argv;
 const packageJson = require('package-json');
 const https = require('https');
 const whichpm = require('which-pm');
+const notifier = require('node-notifier');
 
 /* File reader
  * Return contents of given file
@@ -227,17 +228,19 @@ let handleError = (err) => {
  * Run a given command
  */
 
-let runCommand = (command) => {
+let runCommand = (command, moduleName, notify) => {
   let succeeded = true;
+  let message = `${moduleName} installed`;
+
+  const found = command.includes('uninstall') || command.includes('remove');
+  if (found) message = `${moduleName} removed`;
+
   try {
     execSync(command, { encoding: 'utf8' });
+    if (notify) showNotification(message);
   } catch (error) {
     succeeded = false;
-    // if (error.stderr) {
-    //   handleError(error.stderr);
-    // } else if (error.code) {
-    //   handleError(error.code);
-    // }
+    if (notify) showNotification(`Error installing ${moduleName}`);
   }
   return succeeded;
 };
@@ -330,26 +333,26 @@ let isScopedModule = (name) => name[0] === '@';
  * Install given module
  */
 
-const beginInstallModule = async (name, dev) => {
-  let spinner = startSpinner(`Installing ${name}`, 'green');
+const beginInstallModule = async (name, dev, notify) => {
+  let spinner = startSpinner(`Installing '${name}'`, 'green');
   let command = await getInstallCommand(name, dev);
   let message = `'${name}' installed`;
   if (dev) message += ' in devDependencies';
 
-  let success = runCommand(command);
+  let success = runCommand(command, name, notify);
   if (success) stopSpinner(spinner, message, 'green');
   else stopSpinner(spinner, `'${name}' installation failed`, 'yellow');
 };
 
-const installModule = async ({ name, dev }) => {
+const installModule = ({ name, dev }, notify) => {
   if (isScopedModule(name)) {
     packageJson(name)
       .then(() => {
-        beginInstallModule(name, dev);
+        beginInstallModule(name, dev, notify);
       })
       .catch(() => {});
   } else {
-    beginInstallModule(name, dev);
+    beginInstallModule(name, dev, notify);
   }
 };
 
@@ -357,25 +360,25 @@ const installModule = async ({ name, dev }) => {
 
 /* Install module if author is trusted */
 
-let installModuleIfTrustedAuthor = ({ name, dev }) => {
+let installModuleIfTrustedAuthor = ({ name, dev }, notify) => {
   let trustedAuthor = argv['trust-author'];
   packageJson(name).then((json) => {
     if (json.author && json.author.name === trustedAuthor) {
-      installModule({ name, dev });
+      installModule({ name, dev }, notify);
     } else console.log(colors.red(`${name} not trusted`));
   });
 };
 
-const installIfPopular = (name) => {
+const installIfPopular = ({ name, dev }, notify) => {
   isModulePopular(name, (popular) => {
     // Popular as proxy for trusted
-    if (popular) installModule({ name, dev });
+    if (popular) installModule({ name, dev }, notify);
     // Trusted Author
     else if (argv['trust-author']) {
-      installModuleIfTrustedAuthor({ name, dev });
+      installModuleIfTrustedAuthor({ name, dev }, notify);
     }
     // Not trusted
-    else console.log(colors.red(`${name} not trusted`));
+    else console.log(colors.red(`'${name}' not trusted`));
   });
 };
 
@@ -383,18 +386,18 @@ const installIfPopular = (name) => {
  * Call isModulePopular before installing
  */
 
-let installModuleIfTrusted = ({ name, dev }) => {
+let installModuleIfTrusted = ({ name, dev }, notify) => {
   // Trust scoped modules
   if (isScopedModule(name)) {
     packageJson(name)
       .then(() => {
-        installIfPopular(name);
+        installIfPopular({ name, dev }, notify);
       })
       .catch((err) => {
         // handleError(err.message);
       });
   } else {
-    installIfPopular(name);
+    installIfPopular({ name, dev }, notify);
   }
 };
 
@@ -417,14 +420,14 @@ let getUninstallCommand = (name) => {
 
 /* Uninstall module */
 
-let uninstallModule = ({ name, dev }) => {
+let uninstallModule = ({ name, dev }, notify) => {
   if (dev) return;
 
   let command = getUninstallCommand(name);
   let message = `${name} removed`;
 
   let spinner = startSpinner(`Uninstalling ${name}`, 'red');
-  runCommand(command);
+  runCommand(command, name, notify);
   stopSpinner(spinner, message, 'red');
 };
 
@@ -487,6 +490,20 @@ let cleanup = async () => {
 let packageJSONExists = () => fs.existsSync('package.json');
 
 /* Public helper functions */
+
+/* Public helper functions */
+
+/* Display Notifications */
+
+const showNotification = (message) => {
+  notifier.notify({
+    title: 'Auto Installer Extension',
+    message: message,
+    open: 0,
+    wait: false,
+    sound: 'Pop'
+  });
+};
 
 module.exports = {
   getInstalledModules,
