@@ -3,12 +3,12 @@
   "version": "1.7.5",
   "description": "Auto installs dependencies as you code",
   "keywords": "auto, dependencies, install, package, watch",
-  "homepage": "https://github.com/siddharthkp/auto-install#readme",
-  "repository": "siddharthkp/auto-install",
+  "homepage": "https://github.com/ceafive/auto-install/blob/master/README.md",
+  "repository": "ceafive/auto-install",
   "license": "MIT",
   "main": "src/index.js",
   "bin": "lib/index.js",
-  "author": "siddharthkp",
+  "author": "ceafive",
   "scripts": {
     "lint": "eslint src",
     "build": "babel src --out-dir lib && babel test/src --out-dir test/lib",
@@ -21,6 +21,7 @@
   "dependencies": {
     "chokidar": "2.0.0",
     "colors": "1.1.2",
+    "core-js": "^3.6.5",
     "glob": "7.1.0",
     "is-builtin-module": "1.0.0",
     "log-symbols": "1.0.2",
@@ -36,7 +37,6 @@
     "@babel/core": "^7.12.9",
     "@babel/preset-env": "^7.12.7",
     "chai": "3.5.0",
-    "core-js": "^3.6.5",
     "eslint": "^4.19.1",
     "eslint-config-prettier": "^6.15.0",
     "mocha": "3.1.2"
