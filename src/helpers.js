@@ -230,10 +230,10 @@ let handleError = (err) => {
 
 let runCommand = (command, moduleName, notify) => {
   let succeeded = true;
-  let message = `${moduleName} installed`;
+  let message = `Package '${moduleName}' installed`;
 
   const found = command.includes('uninstall') || command.includes('remove');
-  if (found) message = `${moduleName} removed`;
+  if (found) message = `Package '${moduleName}' removed`;
 
   try {
     execSync(command, { encoding: 'utf8' });
