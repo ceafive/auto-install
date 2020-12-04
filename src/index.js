@@ -57,15 +57,14 @@ main = () => {
   }
 
   if (!watchersInitialized) initializeWatchers();
-  helpers.cleanup().then(() => {
-    // installModules
+  helpers.cleanup();
+  // installModules
 
-    let modulesNotInstalled = helpers.diff(usedModules, installedModules);
-    for (let module of modulesNotInstalled) {
-      if (secureMode) helpers.installModuleIfTrusted(module);
-      else helpers.installModule(module);
-    }
-  });
+  let modulesNotInstalled = helpers.diff(usedModules, installedModules);
+  for (let module of modulesNotInstalled) {
+    if (secureMode) helpers.installModuleIfTrusted(module);
+    else helpers.installModule(module);
+  }
 };
 
 /* Turn the key */
