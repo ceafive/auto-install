@@ -1,17 +1,16 @@
 const fs = require('fs');
 const glob = require('glob');
 const { execSync } = require('child_process');
+const compiler = require('vue-template-compiler');
 const isBuiltInModule = require('is-builtin-module');
 const ora = require('ora');
 const logSymbols = require('log-symbols');
-const detective = require('detective');
-const es6detective = require('detective-es6');
+const Walker = require('node-source-walk');
 const colors = require('colors');
 const argv = require('yargs').argv;
 const packageJson = require('package-json');
 const https = require('https');
 const whichpm = require('which-pm');
-require('./includes-polyfill');
 
 /* File reader
  * Return contents of given file
@@ -51,44 +50,95 @@ let getInstalledModules = () => {
 /* Get all js files
  * Return path of all js files
  */
-let getFiles = () => glob.sync('**/*.js', { ignore: ['node_modules/**/*'] });
+const getFilesPath = () => {
+  const path1 = glob.sync('**/*.js', { ignore: ['**/node_modules/**/*'] });
+  // const path4 = glob.sync("**/*.ts", { ignore: ['**/node_modules/**/*'] });
+  const path2 = glob.sync('**/*.jsx', { ignore: ['**/node_modules/**/*'] });
+  const path3 = glob.sync('**/*.vue', { ignore: ['**/node_modules/**/*'] });
+  return path1.concat(path2, path3);
+};
 
 /* Check for valid string - to stop malicious intentions */
 
-let isValidModule = ({ name }) => {
-  let regex = new RegExp('^([a-z0-9-_]{1,})$');
+const isValidModule = (name) => {
+  // let regex = new RegExp("^([a-z0-9-_]{1,})$");
+  let regex = new RegExp('^([@a-z0-9-_/]{1,})$');
   return regex.test(name);
+};
+
+/* Parses through file to extract dependencies used in file
+ * Return array of dependencies
+ */
+
+const detective = (src, options) => {
+  const walker = new Walker();
+
+  const dependencies = [];
+
+  walker.walk(src, (node) => {
+    switch (node.type) {
+      case 'ImportDeclaration':
+        if (options && options.skipTypeImports && node.importKind == 'type') {
+          break;
+        }
+        if (!node.source) {
+          return dependencies;
+        }
+        if (node.source && node.source.value) {
+          dependencies.push(node.source.value);
+        }
+        break;
+      case 'CallExpression':
+        const args = node.arguments;
+        if (node.callee.name === 'require' && args.length) {
+          dependencies.push(args[0].value);
+        }
+        if (node.callee.type === 'Import' && args.length) {
+          dependencies.push(args[0].value);
+        }
+      default:
+        return;
+    }
+  });
+
+  return dependencies;
 };
 
 /* Find modules from file
  * Returns array of modules from a file
  */
 
-let getModulesFromFile = (path) => {
-  let content = fs.readFileSync(path, 'utf8');
-  let modules = [];
-  const detectiveOptions = { parse: { sourceType: 'module' } };
+const getModulesFromFile = (path) => {
+  const content = fs.readFileSync(path, 'utf8');
+  let output = '';
+  if (path.endsWith('.vue')) {
+    if (compiler.parseComponent(content).script)
+      output = compiler.parseComponent(content).script.content;
+  } else output = content;
+
+  // return output;
+  let allModules = [];
+
+  //set options for babel parser used in detective module
+  const detectiveOptions = {
+    sourceType: 'module',
+    errorRecovery: true,
+    allowImportExportEverywhere: true
+  };
   try {
-    modules = detective(content, detectiveOptions);
-
-    let es6modules = es6detective(content, detectiveOptions);
-    modules = modules.concat(es6modules);
-
-    modules = modules.filter((module) => isValidModule(module));
+    //sniff file for ES6 import statements
+    allModules = detective(output, detectiveOptions);
+    // filter modules;
+    allModules = allModules.filter((module) => isValidModule(module));
   } catch (err) {
     const line = content.split('\n')[err.loc.line - 1];
-    console.log(
-      colors.red(
-        `Could not parse ${path}. There is a syntax error in file at line ${
-          err.loc.line
-        } column: ${err.loc.column}.\n${line.slice(
-          0,
-          err.loc.column - 1
-        )}^${line.slice(err.loc.column - 1)}`
-      )
-    );
+    const error = `Babel parser error. Could not parse '${path}'. There is a syntax error in file at line ${err.loc.line} column: ${err.loc.column}\ncausing all modules used in this file ONLY to be uninstalled`;
+    handleError(error);
   }
-  return modules;
+
+  // return filtered modules;
+  allModules = allModules.filter((module) => isValidModule(module));
+  return allModules;
 };
 
 /* Is test file?
@@ -142,14 +192,19 @@ let deduplicate = (modules) => {
  * Read all .js files and grep for modules
  */
 
-let getUsedModules = () => {
-  let files = getFiles();
+const getUsedModules = () => {
+  //grab all files matching extensions programmed in "getFilesPath" function
+  const filesPath = getFilesPath();
   let usedModules = [];
-  for (let fileName of files) {
-    let modulesFromFile = getModulesFromFile(fileName);
-    let dev = isTestFile(fileName);
-    for (let name of modulesFromFile) usedModules.push({ name, dev });
+  //loop through returned 'filesPath' array
+  for (const filePath of filesPath) {
+    // Sniff each file for modules used in file
+    let modulesFromFile = getModulesFromFile(filePath);
+    //check and set set 'dev' key on file extenstion matching ".test.js" or ".spec.js"
+    const dev = isTestFile(filePath);
+    for (const name of modulesFromFile) usedModules.push({ name, dev });
   }
+
   usedModules = deduplicate(usedModules);
   return usedModules;
 };
@@ -178,7 +233,11 @@ let runCommand = (command) => {
     execSync(command, { encoding: 'utf8' });
   } catch (error) {
     succeeded = false;
-    handleError(error.stderr);
+    // if (error.stderr) {
+    //   handleError(error.stderr);
+    // } else if (error.code) {
+    //   handleError(error.code);
+    // }
   }
   return succeeded;
 };
@@ -266,26 +325,35 @@ let getInstallCommand = async (name, dev) => {
   return command;
 };
 
+let isScopedModule = (name) => name[0] === '@';
 /* Install module
  * Install given module
  */
 
-let installModule = ({ name, dev }) => {
+const beginInstallModule = async (name, dev) => {
   let spinner = startSpinner(`Installing ${name}`, 'green');
-
-  let command = getInstallCommand(name, dev);
-
-  let message = `${name} installed`;
+  let command = await getInstallCommand(name, dev);
+  let message = `'${name}' installed`;
   if (dev) message += ' in devDependencies';
 
   let success = runCommand(command);
   if (success) stopSpinner(spinner, message, 'green');
-  else stopSpinner(spinner, `${name} installation failed`, 'yellow');
+  else stopSpinner(spinner, `'${name}' installation failed`, 'yellow');
+};
+
+const installModule = async ({ name, dev }) => {
+  if (isScopedModule(name)) {
+    packageJson(name)
+      .then(() => {
+        beginInstallModule(name, dev);
+      })
+      .catch(() => {});
+  } else {
+    beginInstallModule(name, dev);
+  }
 };
 
 /* is scoped module? */
-
-let isScopedModule = (name) => name[0] === '@';
 
 /* Install module if author is trusted */
 
@@ -298,24 +366,35 @@ let installModuleIfTrustedAuthor = ({ name, dev }) => {
   });
 };
 
+const installIfPopular = (name) => {
+  isModulePopular(name, (popular) => {
+    // Popular as proxy for trusted
+    if (popular) installModule({ name, dev });
+    // Trusted Author
+    else if (argv['trust-author']) {
+      installModuleIfTrustedAuthor({ name, dev });
+    }
+    // Not trusted
+    else console.log(colors.red(`${name} not trusted`));
+  });
+};
+
 /* Install module if trusted
  * Call isModulePopular before installing
  */
 
 let installModuleIfTrusted = ({ name, dev }) => {
   // Trust scoped modules
-  if (isScopedModule(name)) installModule({ name, dev });
-  else {
-    isModulePopular(name, (popular) => {
-      // Popular as proxy for trusted
-      if (popular) installModule({ name, dev });
-      // Trusted Author
-      else if (argv['trust-author']) {
-        installModuleIfTrustedAuthor({ name, dev });
-      }
-      // Not trusted
-      else console.log(colors.red(`${name} not trusted`));
-    });
+  if (isScopedModule(name)) {
+    packageJson(name)
+      .then(() => {
+        installIfPopular(name);
+      })
+      .catch((err) => {
+        // handleError(err.message);
+      });
+  } else {
+    installIfPopular(name);
   }
 };
 
@@ -389,10 +468,13 @@ let diff = (first, second) => {
 
 /* Reinstall modules */
 
-let cleanup = () => {
+let cleanup = async () => {
+  const cmd = await whichPackageManager();
   let spinner = startSpinner('Cleaning up', 'green');
-  if (argv.yarn) runCommand('yarn');
-  else runCommand('npm install');
+  if (cmd === 'npm' || cmd === 'pnpm' || cmd === 'yarn') {
+    const args = [`${cmd} install`];
+    runCommand(args);
+  }
   stopSpinner(spinner);
 };
 
@@ -415,5 +497,6 @@ module.exports = {
   uninstallModule,
   diff,
   cleanup,
-  packageJSONExists
+  packageJSONExists,
+  getFilesPath
 };

@@ -21,13 +21,11 @@ if (argv.uninstall) uninstallMode = true;
  */
 
 let initializeWatchers = () => {
-  let watcher = chokidar.watch('**/*.js', {
-    ignored: 'node_modules'
-  });
+  let watcher = chokidar.watch(helpers.getFilesPath());
   watcher.on('change', main).on('unlink', main);
 
   watchersInitialized = true;
-  console.log('Watchers initialized');
+  console.log(colors.green('Watchers initialized'));
 };
 
 /* Main wrapper
@@ -58,16 +56,16 @@ main = () => {
     for (let module of unusedModules) helpers.uninstallModule(module);
   }
 
-  // installModules
-
-  let modulesNotInstalled = helpers.diff(usedModules, installedModules);
-  for (let module of modulesNotInstalled) {
-    if (secureMode) helpers.installModuleIfTrusted(module);
-    else helpers.installModule(module);
-  }
-
-  helpers.cleanup();
   if (!watchersInitialized) initializeWatchers();
+  helpers.cleanup().then(() => {
+    // installModules
+
+    let modulesNotInstalled = helpers.diff(usedModules, installedModules);
+    for (let module of modulesNotInstalled) {
+      if (secureMode) helpers.installModuleIfTrusted(module);
+      else helpers.installModule(module);
+    }
+  });
 };
 
 /* Turn the key */
