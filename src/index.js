@@ -8,20 +8,24 @@ const argv = require('yargs').argv;
 let watchersInitialized = false;
 let main;
 
-/* Secure mode */
-
-let secureMode = false;
-if (argv.secure) secureMode = true;
-
 /**
- * Show installation notifications
+ * Arguments that can be passed to function when it is spawned eg. Nodejs child process, spawn
  */
 
-let notifyMode = true;
-if (argv['notify']) notifyMode = false;
+/* Secure mode */
+let secureMode = false;
+if (argv.secure) secureMode = true;
+if (argv['no-secure']) secureMode = false;
 
+/* Show installation notifications */
+let notifyMode = true;
+if (argv.notify) notifyMode = true;
+if (argv['no-notify']) notifyMode = false;
+
+/* Auto uninstall modules  */
 let uninstallMode = false;
 if (argv.uninstall) uninstallMode = true;
+if (argv['no-uninstall']) uninstallMode = false;
 
 /* Watch files and repeat drill
  * Add a watcher, call main wrapper to repeat cycle
