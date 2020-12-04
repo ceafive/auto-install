@@ -28,6 +28,7 @@
     "log-symbols": "1.0.2",
     "ora": "0.3.0",
     "package-json": "2.4.0",
+    "which-pm": "^2.0.0",
     "yargs": "6.3.0"
   },
   "devDependencies": {
@@ -45,5 +46,9 @@
     "presets": [
       "es2015"
     ]
+  },
+  "prettier": {
+    "singleQuote": true,
+    "trailingComma": "none"
   }
 }

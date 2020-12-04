@@ -13,22 +13,21 @@ let main;
 let secureMode = false;
 if (argv.secure) secureMode = true;
 
-let uninstallMode = true;
-if (argv['dont-uninstall']) uninstallMode = false;
+let uninstallMode = false;
+if (argv.uninstall) uninstallMode = true;
 
 /* Watch files and repeat drill
  * Add a watcher, call main wrapper to repeat cycle
  */
 
 let initializeWatchers = () => {
-    let watcher = chokidar.watch('**/*.js', {
-        ignored: 'node_modules'
-    });
-    watcher.on('change', main)
-    .on('unlink', main);
+  let watcher = chokidar.watch('**/*.js', {
+    ignored: 'node_modules'
+  });
+  watcher.on('change', main).on('unlink', main);
 
-    watchersInitialized = true;
-    console.log('Watchers initialized');
+  watchersInitialized = true;
+  console.log('Watchers initialized');
 };
 
 /* Main wrapper
@@ -40,37 +39,36 @@ let initializeWatchers = () => {
  */
 
 main = () => {
-    if (!helpers.packageJSONExists()) {
-        console.log(colors.red('package.json does not exist'));
-        console.log(colors.red('You can create one by using `npm init`'));
-        return;
-    }
+  if (!helpers.packageJSONExists()) {
+    console.log(colors.red('package.json does not exist'));
+    console.log(colors.red('You can create one by using `npm init`'));
+    return;
+  }
 
-    let installedModules = [];
-    installedModules = helpers.getInstalledModules();
+  let installedModules = [];
+  installedModules = helpers.getInstalledModules();
 
-    let usedModules = helpers.getUsedModules();
-    usedModules = helpers.filterRegistryModules(usedModules);
+  let usedModules = helpers.getUsedModules();
+  usedModules = helpers.filterRegistryModules(usedModules);
 
-    // removeUnusedModules
+  // removeUnusedModules
 
-    if (uninstallMode) {
-        let unusedModules = helpers.diff(installedModules, usedModules);
-        for (let module of unusedModules) helpers.uninstallModule(module);
-    }
+  if (uninstallMode) {
+    let unusedModules = helpers.diff(installedModules, usedModules);
+    for (let module of unusedModules) helpers.uninstallModule(module);
+  }
 
-    // installModules
+  // installModules
 
-    let modulesNotInstalled = helpers.diff(usedModules, installedModules);
-    for (let module of modulesNotInstalled) {
-        if (secureMode) helpers.installModuleIfTrusted(module);
-        else helpers.installModule(module);
-    }
+  let modulesNotInstalled = helpers.diff(usedModules, installedModules);
+  for (let module of modulesNotInstalled) {
+    if (secureMode) helpers.installModuleIfTrusted(module);
+    else helpers.installModule(module);
+  }
 
-    helpers.cleanup();
-    if (!watchersInitialized) initializeWatchers();
+  helpers.cleanup();
+  if (!watchersInitialized) initializeWatchers();
 };
 
 /* Turn the key */
 main();
-
